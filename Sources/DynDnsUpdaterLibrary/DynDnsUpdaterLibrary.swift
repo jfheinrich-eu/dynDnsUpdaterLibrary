@@ -1,7 +1,8 @@
 import Foundation
 
 public struct DynDnsUpdaterLib {
-    internal enum DynDnyUpaterError: Error {
+    /// Define the exceptions
+    public enum DynDnyUpaterError: Error {
         case getContent(message: String)
         case badUrl(message: String)
     }
@@ -34,12 +35,18 @@ public struct DynDnsUpdaterLib {
     public private(set) var response = ""
     
     public private(set) var thrownError = ""
-
+    
+    public private(set) var capturedOutput = ""
+    
+    /// Initializer
+    /// - Parameter isCli: true => Library use from a command line tool
     public init(forIsCli isCli: Bool) {
         self.isCli = isCli
     }
     
-
+    
+    /// Executes the DynDns update URL with the own external IP
+    /// - Returns: bool
     public mutating func update()-> Bool {
         do {
             self.externalIP = try curl(ipURI)
@@ -63,8 +70,12 @@ public struct DynDnsUpdaterLib {
         
         return true
     }
-
-    public func curl(_ uri: String)throws ->(String) {
+    
+    /// Execute the HTTP(S) request
+    /// - Parameter uri: Valid UIR to call
+    /// - Returns: Returns the content from the URI
+    /// - Throws: DynDnsUpdater.getContent | DynDnsUpdater.badUrl
+    public mutating func curl(_ uri: String)throws ->(String) {
         var contents = ""
 
         if let url = URL(string: uri) {
@@ -72,58 +83,62 @@ public struct DynDnsUpdaterLib {
             do {
                 contents = try String(contentsOf: url)
             } catch {
-                var message = "Exception by get the content: \(error)"
+                let message = "Exception by get the content: \(error)"
                 
                 if(self.isCli == true) {
-                    self.reportErrorAndExit(message)
+                    self.reportError(message)
                 }
-                else {
-                    throw DynDnyUpaterError.getContent(message: message)
-                }
+                
+                throw DynDnyUpaterError.getContent(message: message)
             }
 
         } else {
-            var message = "Bad URL: \(uri)"
+            let message = "Bad URL: \(uri)"
             
             if(self.isCli == true) {
-                self.reportErrorAndExit(message)
+                self.reportError(message)
             }
-            else
-            {
-                throw DynDnyUpaterError.badUrl(message: message)
-            }
+            
+            throw DynDnyUpaterError.badUrl(message: message)
         }
 
         return contents
     }
-
-    public func writeToStdout(_ message: String) {
+    
+    public mutating func writeToStdout(_ message: String) {
+        self.capturedOutput = ""
         let messageAsString = message + "\r\n"
         if let messageAsData: Data = messageAsString.data(using: .utf8) {
             self.STD_OUT.write(messageAsData)
+            self.capturedOutput = messageAsString
         }
     }
 
-    public func writeSuccess(_ message: String) {
+    public mutating func writeSuccess(_ message: String) {
         if self.isCli == true {
             writeToStdout(self.GREEN + self.BOLD + "OK " + self.RESET + message)
         }
     }
 
-    public func writeToStderr(_ message: String) {
+    public mutating func writeToStderr(_ message: String) {
+        self.capturedOutput = ""
+        
         if self.isCli == true {
             let messageAsString = message + "\r\n"
             if let messageAsData: Data = messageAsString.data(using: .utf8) {
                 self.STD_ERR.write(messageAsData)
             }
+            self.capturedOutput = messageAsString
         }
     }
 
-    public func reportErrorAndExit(_ message: String, _ code: Int32 = EXIT_FAILURE) {
+    @discardableResult public mutating func reportError(_ message: String, _ code: Int32 = EXIT_FAILURE)->String? {
+        let finalMessage = self.RED + self.BOLD + "ERROR " + self.RESET + message
         if self.isCli == true {
-            writeToStderr(self.RED + self.BOLD + "ERROR " + self.RESET + message + " -- exiting")
-            exit(code)
+            writeToStderr(finalMessage + " -- exiting")
         }
+        
+        return finalMessage
     }
 }
 
